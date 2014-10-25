@@ -1,0 +1,81 @@
+---
+title: "Activity evaluation"
+author: "Bjoernzu"
+date: "Sunday, October 19, 2014"
+output: html_document
+---
+
+The aim of this project is to build a model, using a machine learning algorithm, which can predict from the data of different motion sensors if a training activity is done properly. 
+We have one training and one testing data set. The testing data does not contain the column which indicates how well the activity was performed. In the end we try to predict those values for the testing data set.
+
+
+In the first step we load the necessary packages and data and set the seed.
+
+```{r, cache=TRUE, results='hide'}
+require(caret)
+require(randomForest)
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+set.seed(42)
+```
+
+#Data exploration and adjustment
+If we look into the data we find a lot of columns that are only not NA when new_window is equal to "yes". 
+As this is the case only in 406 of the training cases and in none of the testing cases, it is safe to omit those columns.
+
+```{r, cache=TRUE}
+NAColumns <- sapply(testing, function(x) all(is.na(x)))
+training <- training[,!NAColumns]
+testing <- testing[,!NAColumns]
+```
+
+Additionally the first seven columns include only meta data like timestamps or the athletes name, so we remove them too.
+
+```{r, cache=TRUE}
+training <- training[,8:60]
+testing <- testing[,8:60]
+```
+
+Now we can create a real training and a testing set from the training data.
+```{r, cache=TRUE}
+inTrain <- createDataPartition(y=training$classe, p=0.7,list=FALSE)
+traintrain <- training[inTrain,]
+traintest <- training[-inTrain,]
+```
+
+#Model creation and evaluation
+We will create a modell based on the random forest algorithm. One benefit of using the random forest algorithm is that we do not need to perform an explicit cross validation to reduce the out of sample error. During the training the random forest algorithm already uses multiple, randomly selected, data sets. Further more we know that the random forest algorithm delivers accurate results with very few manual adjustments.
+
+```{r, cache=TRUE}
+modfit <- randomForest(classe~., data=traintrain)
+```
+
+Predicting the values for the training test set and comparing it to the real values shows, that our model has only very few wrong predictions:
+```{r, cache=TRUE}
+cm <- confusionMatrix(traintest$classe,predict(modfit,traintest))
+cm$table
+```
+Not let's have a more detailed view into the data. The accuracy of the model is 99.5% with a confidence interval from 99.3% to 99.8%. The P-Value is ~0 so we can be very confident that our model predicts the correct results.
+```{r, cache=TRUE}
+cm$overall
+```
+As mentioned above we don't need to perform a cross validation, as this is done by the random forest algorithm.
+
+#Prediction
+We will now finally predict the activity execution from the testing data set.
+```{r, cache=TRUE}
+result <- predict(modfit,testing)
+result
+```
+
+The last step is now to write the data into files which can be uploaded to Coursera. The function was provided by the Coursera staff.
+```{r, cache=TRUE}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(result)
+```
